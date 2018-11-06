@@ -1,2 +1,5 @@
-*.spyderproject
+.spyderproject/
+__pycache__/
+MNIST_data/
 *.docx
+/exploration.py
