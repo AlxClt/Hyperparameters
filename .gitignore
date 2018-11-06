@@ -1,4 +1,4 @@
-.spyderproject/
+.spyproject/
 __pycache__/
 MNIST_data/
 *.docx
