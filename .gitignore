@@ -4,3 +4,4 @@ MNIST_data/
 *.docx
 todo.txt
 /exploration.py
+sources/
