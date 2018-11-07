@@ -7,9 +7,44 @@ Created on Mon Nov  5 16:58:55 2018
 
 import tensorflow as tf
 import math
-
-#decorator function wrapping the property in order to evaluate it in a lazy way : https://danijar.com/structuring-your-tensorflow-models/
+import numpy as np
 import functools
+
+
+
+# =============================================================================
+# Piecewise linear function
+# =============================================================================
+class piecewise:
+    
+    def __init__(self,domain=(-5,5),breaks=20,values=(0,1),seed=37):
+        np.random.seed(seed)
+        self.steps = np.linspace(domain[0]-0.01,domain[1]+0.05,breaks)
+        self.values = np.random.uniform(values[0],values[1],breaks)
+    
+    def __call_one(self,x):
+        idx=np.where(self.steps < x)[0][-1]
+        return(self.__step__(x,self.values[idx],self.values[idx+1],self.steps[idx],self.steps[idx+1]))
+     
+    def __step__(self,x,y0,y1,x0,x1):
+        a = (y1-y0)/(x1-x0)
+        b = y0-a*x0
+        return(a*x+b)
+        
+    def call(self,x):
+        try:
+            return([self.__call_one(y) for y in x])
+        except TypeError:
+            return(self.__call_one(x))
+
+
+
+
+# =============================================================================
+# decorator function wrapping the property in order to evaluate it in a lazy way: 
+# see https://danijar.com/structuring-your-tensorflow-models/
+# =============================================================================
+
 
 def lazy_property(function):
     attribute = '_cache_' + function.__name__
