@@ -1,8 +1,13 @@
 .spyproject/
 .ipynb_checkpoints/
+sources/
 __pycache__/
 MNIST_data/
+
 *.docx
 todo.txt
 /exploration.py
-sources/
+
+
+#until notebooks are ready:
+*.ipynb
