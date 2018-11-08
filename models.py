@@ -24,14 +24,14 @@ class piecewise:
     
     def __call_one(self,x):
         idx=np.where(self.steps < x)[0][-1]
-        return(self.__step__(x,self.values[idx],self.values[idx+1],self.steps[idx],self.steps[idx+1]))
+        return(self.__step(x,self.values[idx],self.values[idx+1],self.steps[idx],self.steps[idx+1]))
      
-    def __step__(self,x,y0,y1,x0,x1):
+    def __step(self,x,y0,y1,x0,x1):
         a = (y1-y0)/(x1-x0)
         b = y0-a*x0
         return(a*x+b)
         
-    def call(self,x):
+    def __call__(self,x):
         try:
             return([self.__call_one(y) for y in x])
         except TypeError:
@@ -70,7 +70,8 @@ def lazy_property(function):
 class MNISTModel:
 
     def __init__(self,batch,target,step,batch_size,
-                 min_lr = 0.0001,max_lr = 0.003,decay_step = 2000,decay_rate = 1/math.e,
+                 min_lr_ratio = 30,max_lr = 0.003,decay_step = 2000,decay_rate = 1/math.e,
+                 optimizer_hparams={'optimizer':tf.train.AdamOptimizer,'beta1':0.9,'beta2':0.999,'epsilon':1e-08},
                  K=6,L=12,M=24,N=200,C1=6,C2=5,C3=4,pkeep=0.3):           
         
         #data
@@ -93,22 +94,25 @@ class MNISTModel:
         self.W4 = tf.Variable(tf.truncated_normal([7 * 7 * M, N], stddev=0.1))
         self.B4 = tf.Variable(tf.constant(0.1, tf.float32, [N]))
         
+        self.W4 = tf.Variable(tf.truncated_normal([7 * 7 * M, N], stddev=0.1))
+        self.B4 = tf.Variable(tf.constant(0.1, tf.float32, [N]))
+        
         self.W5 = tf.Variable(tf.truncated_normal([N, 10], stddev=0.1))
         self.B5 = tf.Variable(tf.constant(0.1, tf.float32, [10]))
         
         #keep the last size for the reshape operation
         self.M = M
-        self.L=L
         
         #Dropout
         self.pkeep = pkeep # Dropout probability
 
         #Optimization parameters
-        self.min_lr = min_lr
+        self.min_lr = max_lr/min_lr_ratio
         self.max_lr = max_lr
-        self.decay_step = decay_step
+        self.decay_step = int(decay_step)
         self.decay_rate = decay_rate
-        
+        self.optimizer=optimizer_hparams.pop('optimizer')
+        self.optimizer_hparams=optimizer_hparams
         #Graph initialization
         self.predict
         self.optimize
@@ -124,21 +128,14 @@ class MNISTModel:
         stride = 1  # output is 28x28
         Y1 = tf.nn.relu(tf.nn.conv2d(X, self.W1, strides=[1, stride, stride, 1], padding='SAME') + self.B1)
         
-        #ORIGINAL 3 LAYERS MODEL
-        #stride = 2  # output is 14x14
-        #Y2 = tf.nn.relu(tf.nn.conv2d(Y1, self.W2, strides=[1, stride, stride, 1], padding='SAME') + self.B2)
+        stride = 2  # output is 14x14
+        Y2 = tf.nn.relu(tf.nn.conv2d(Y1, self.W2, strides=[1, stride, stride, 1], padding='SAME') + self.B2)
         
-        #stride = 2  # output is 7x7
-        #Y3 = tf.nn.relu(tf.nn.conv2d(Y2, self.W3, strides=[1, stride, stride, 1], padding='SAME') + self.B3)
+        stride = 2  # output is 7x7
+        Y3 = tf.nn.relu(tf.nn.conv2d(Y2, self.W3, strides=[1, stride, stride, 1], padding='SAME') + self.B3)
         
-        # reshape the output from the third convolution for the fully connected layer
-        #YY = tf.reshape(Y3, shape=[-1, 7 * 7 * self.M])       
-        
-        #OMIT 3rd LAYER
-        stride = 4  # output is 7x7
-        Y3 = tf.nn.relu(tf.nn.conv2d(Y1, self.W2, strides=[1, stride, stride, 1], padding='SAME') + self.B2)
-        YY = tf.reshape(Y3, shape=[-1, 7 * 7 * self.L])
-        #
+        #reshape the output from the third convolution for the fully connected layer
+        YY = tf.reshape(Y3, shape=[-1, 7 * 7 * self.M])       
         
         Y4 = tf.nn.relu(tf.matmul(YY, self.W4) + self.B4)
         YY4 = tf.nn.dropout(Y4, self.pkeep)
@@ -159,7 +156,7 @@ class MNISTModel:
         cross_entropy = tf.reduce_mean(cross_entropy)*tf.cast(self.batch_size,tf.float32)
         
         lr = self.min_lr +  tf.train.exponential_decay(self.max_lr, self.step, self.decay_step, self.decay_rate)
-        train_step = tf.train.AdamOptimizer(lr).minimize(cross_entropy)
+        train_step = self.optimizer(lr,**self.optimizer_hparams).minimize(cross_entropy)
         
         return(train_step, cross_entropy)
     

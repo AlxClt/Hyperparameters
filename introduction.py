@@ -1,12 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Nov  5 16:59:04 2018
+Created on Thu Nov  8 14:39:51 2018
 
 @author: Alexis
 
-Bayesian hyperparameter optimization using hyperopt
-
-WORK IN PROGRESS
+CODE CORRESPONDING TO THE INTRODUCTION NOTEBOOK
 """
 
 import numpy as np
@@ -15,8 +13,12 @@ from scipy.stats import norm
 from models import piecewise
 import time
 
+from hyperopt import fmin, tpe, hp, rand, STATUS_OK, Trials
 
 
+from matplotlib import animation
+import matplotlib.patches as patches
+import matplotlib.path as path
 # =============================================================================
 # Simple cases
 # =============================================================================
@@ -25,11 +27,11 @@ import time
 #gaussian mixture
 f, g, h = norm(loc=-3, scale = 1), norm(loc=0, scale = 1), norm(loc=4, scale = 1)
 def gaussian_mixture(x):
-    return(1-0.2*f.pdf(x)+0.35*g.pdf(x)+0.45*h.pdf(x))
+    return(0.49*(1-f.pdf(x))+0.1*(1-g.pdf(x))+0.51*(1-h.pdf(x)))
   
 #random piecewise linear function
 def piecewise_linear(x):
-    return(piecewise(breaks=15).call(x))
+    return(piecewise(breaks=15)(x))
 
 #plot the functions to minimize
 x=np.linspace(-5,5,5000)
@@ -48,7 +50,6 @@ plt.show()
 
 #use hyperopt to find the min
 
-from hyperopt import fmin, tpe, hp, rand, STATUS_OK, Trials
 
 #We will make use of the trials objects to carry information along the process
 def objective1(x):
@@ -73,13 +74,13 @@ trials_rnd_1 = Trials()
 best_tpe_1 = fmin(objective1,
     space=hp.uniform('x', -5, 5),
     algo=tpe.suggest,
-    max_evals=2000,
+    max_evals=1000,
     trials=trials_tpe_1)
 
 best_rnd_1 = fmin(objective1,
     space=hp.uniform('x', -5, 5),
     algo=rand.suggest,
-    max_evals=2000,
+    max_evals=1000,
     trials=trials_rnd_1)
 
     
@@ -89,13 +90,13 @@ trials_rnd_2 = Trials()
 best_tpe_2 = fmin(objective2,
     space=hp.uniform('x', -5, 5),
     algo=tpe.suggest,
-    max_evals=2000,
+    max_evals=1000,
     trials=trials_tpe_2)
 
 best_rnd_2 = fmin(objective2,
     space=hp.uniform('x', -5, 5),
     algo=rand.suggest,
-    max_evals=2000,
+    max_evals=1000,
     trials=trials_rnd_2)
 
 #general 
@@ -125,10 +126,6 @@ print(trials_rnd_2.best_trial['tid'])
 
 #focus on evolution: how does the q=algorithm sample their values?
 
-    
-from matplotlib import animation
-import matplotlib.patches as patches
-import matplotlib.path as path
 
 
 def animation_plot(trial_object,generative_function,x_range=(-5,5),stop_at=1000,anim_len=10):
@@ -145,14 +142,13 @@ def animation_plot(trial_object,generative_function,x_range=(-5,5),stop_at=1000,
 
 
     fig = plt.figure(figsize=(16,9))
-
     ax1=fig.add_subplot(121)
     ax1.set_xlim(x_range[0],x_range[1])
     ax1.set_ylim(y_range[0],y_range[1])
     ax1.plot(x_axis,generative_function(x_axis),color='b',linestyle='dashed')
     scats, = ax1.plot([], [],'ro',markersize=5)
     scats.set_data([], [])
-     
+    plt.title('Sampled values evolution')
     
     n, bins = np.histogram(samples, n_bins)
     
@@ -191,7 +187,8 @@ def animation_plot(trial_object,generative_function,x_range=(-5,5),stop_at=1000,
     ax2.add_patch(patch)
     ax2.set_xlim(*x_range)
     ax2.set_ylim(0, 1)
-    
+    plt.title('Sampled values histogram (normed)')
+
     # animation function.  This is called sequentially
     def animate(i):
         x =samples[:i]
@@ -225,15 +222,3 @@ animation_plot(trials_rnd_2,piecewise_linear)
 
 #TPE algorithm on the piecewise linear loss
 animation_plot(trials_tpe_2,piecewise_linear)
-
-# =============================================================================
-# Test on MNIST model
-# =============================================================================
-
-
-
-
-
-
-
-
