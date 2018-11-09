@@ -69,10 +69,10 @@ def lazy_property(function):
 # MNIST with fixed structure conv + conv + conv + relu + dpout + softmax 
 class MNISTModel:
 
-    def __init__(self,batch,target,step,batch_size,
+    def __init__(self,batch,target,step,batch_size,pkeep,
                  min_lr_ratio = 30,max_lr = 0.003,decay_step = 2000,decay_rate = 1/math.e,
                  optimizer_hparams={'optimizer':tf.train.AdamOptimizer,'beta1':0.9,'beta2':0.999,'epsilon':1e-08},
-                 K=6,L=12,M=24,N=200,C1=6,C2=5,C3=4,pkeep=0.3):           
+                 K=6,L=12,M=24,N=200,C1=6,C2=5,C3=4):           
         
         #data
         self.batch=batch
@@ -137,6 +137,7 @@ class MNISTModel:
         #reshape the output from the third convolution for the fully connected layer
         YY = tf.reshape(Y3, shape=[-1, 7 * 7 * self.M])       
         
+       
         Y4 = tf.nn.relu(tf.matmul(YY, self.W4) + self.B4)
         YY4 = tf.nn.dropout(Y4, self.pkeep)
         
