@@ -4,6 +4,9 @@ sources/
 __pycache__/
 MNIST_data/
 
+#until the part on deep learning is ready
+data/
+
 *.docx
 todo.txt
 /exploration.py
