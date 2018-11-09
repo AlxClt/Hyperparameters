@@ -3,6 +3,7 @@
 sources/
 __pycache__/
 MNIST_data/
+videos/
 
 #until the part on deep learning is ready
 data/
