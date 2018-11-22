@@ -220,13 +220,14 @@ from sklearn.model_selection import GridSearchCV
 def apply_logistic(hparams):
      
      apply_pca = hparams.pop('apply_pca')
-     pca_n_components = int(hparams.pop('pca_n_components'))
-     logistic = SGDClassifier(loss='log',max_iter=10000, tol=1e-5, random_state=0, **hparams)
      
      if(apply_pca):
+          pca_n_components = int(hparams.pop('pca_n_components'))
           pca = PCA(n_components = pca_n_components)
+          logistic = SGDClassifier(loss='log',max_iter=10000, tol=1e-5, random_state=0, **hparams)
           pipe = Pipeline(steps=[('pca', pca), ('logistic', logistic)])
      else: 
+          logistic = SGDClassifier(loss='log',max_iter=10000, tol=1e-5, random_state=0, **hparams)
           pipe = Pipeline(steps=[('logistic', logistic)])
      
      digits = datasets.load_digits()
@@ -246,10 +247,21 @@ def objective(hparams):
         }
     
 #search space definition. We keep log loss otherwise the algorithm is no longer a logistic regression classifier anymore
-space = {'alpha':hp.uniform('alpha',0.0001,5),
+bad_space = {'alpha':hp.uniform('alpha',0.0001,5),
         'l1_ratio': hp.uniform('l1_ratio',0,1),
         'apply_pca':hp.choice('apply_pca',[0,1]),
         'pca_n_components':hp.quniform('pca_n_components',1,64,2)}
+
+space = hp.choice('with_pca',
+    [
+        {'apply_pca':0,'alpha':hp.uniform('alpha_0',0.0001,5),'l1_ratio': hp.uniform('l1_ratio_0',0,1)},
+        {'apply_pca':1,'pca_n_components':hp.quniform('pca_n_components',1,64,2),'alpha':hp.uniform('alpha_1',0.0001,5),'l1_ratio': hp.uniform('l1_ratio_1',0,1)}
+    ])
+
+     
+import hyperopt.pyll.stochastic
+print(hyperopt.pyll.stochastic.sample(space))
+
 #tpe
 trials_tpe=Trials()
 
@@ -266,10 +278,12 @@ print('Best TPE hparams :')
 print(best)
 
 #random search
-space = {'alpha':hp.uniform('alpha',0.0001,5),
-        'l1_ratio': hp.uniform('l1_ratio',0,1),
-        'apply_pca':hp.choice('apply_pca',[0,1]),
-        'pca_n_components':hp.quniform('pca_n_components',1,64,2)}
+space = hp.choice('with_pca',
+    [
+        {'apply_pca':0,'alpha':hp.uniform('alpha_0',0.0001,5),'l1_ratio': hp.uniform('l1_ratio_0',0,1)},
+        {'apply_pca':1,'pca_n_components':hp.quniform('pca_n_components',1,64,2),'alpha':hp.uniform('alpha_1',0.0001,5),'l1_ratio': hp.uniform('l1_ratio_1',0,1)}
+    ])
+
 
 trials_rnd=Trials()
 
@@ -354,21 +368,22 @@ def get_values(trial,*keys):
                if key=='score':
                     res['score'].append(1-t['result']['loss'])
                else:
-                    res[key].append(vals[key][0])
+                    if len(vals[key])>0:
+                         res[key].append(vals[key][0])
+                    else:
+                         res[key].append(np.nan)
      return(res)
 
-vals_tpe=get_values(trials_tpe,'alpha','l1_ratio','apply_pca','pca_n_components','score')
-vals_rnd=get_values(trials_rnd,'alpha','l1_ratio','apply_pca','pca_n_components','score')
+vals_tpe=get_values(trials_tpe,'alpha_0','l1_ratio_0','apply_pca','alpha_1','l1_ratio_1','pca_n_components','score')
+vals_rnd=get_values(trials_rnd,'alpha_0','l1_ratio_0','apply_pca','alpha_1','l1_ratio_1','pca_n_components','score')
 
 vals_tpe=pd.DataFrame(vals_tpe)
-vals_tpe.iloc[:,0:4].plot(kind='kde',subplots=True, sharex=False, layout=(2,2))
-plt.title('Sampling distribution of the TPE algorithm')
-plt.tight_layout()
+vals_tpe.iloc[:,0:6].plot(kind='kde',subplots=True, sharex=False, layout=(2,3),title='Sampling distribution of the TPE algorithm',figsize=(16,9))
 
 vals_rnd=pd.DataFrame(vals_rnd)
-vals_rnd.iloc[:,0:4].plot(kind='kde',subplots=True, sharex=False,layout=(2,2))
-plt.title('Sampling distribution of the random search algorithm')
-plt.tight_layout()
+vals_tpe.iloc[:,0:6].plot(kind='kde',subplots=True, sharex=False, layout=(2,3),title='Sampling distribution of the Random Search algorithm',figsize=(16,9))
+
+
 
 highscores_tpe=vals_tpe[vals_tpe['score']>=0.99*vals_tpe.score.max()].reset_index()
 highscores_tpe=highscores_tpe.rename({'index':'iteration'},axis=1)
