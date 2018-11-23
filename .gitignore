@@ -5,8 +5,7 @@ __pycache__/
 MNIST_data/
 videos/
 
-#until the part on deep learning is ready
-data/
+data/tests
 
 *.docx
 todo.txt
