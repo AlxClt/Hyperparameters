@@ -9,7 +9,6 @@ CODE CORRESPONDING TO THE INTRODUCTION NOTEBOOK
 
 import numpy as np
 from scipy.stats import norm
-from models import piecewise
 import time
 import pandas as pd
 #Bayesian optimisation
@@ -31,6 +30,29 @@ def gaussian_mixture(x):
     return(0.49*(1-f.pdf(x))+0.1*(1-g.pdf(x))+0.51*(1-h.pdf(x)))
   
 #random piecewise linear function
+ 
+class piecewise:
+    
+    def __init__(self,domain=(-5,5),breaks=20,values=(0,1),seed=37):
+        np.random.seed(seed)
+        self.steps = np.linspace(domain[0]-0.01,domain[1]+0.05,breaks)
+        self.values = np.random.uniform(values[0],values[1],breaks)
+    
+    def __call_one(self,x):
+        idx=np.where(self.steps < x)[0][-1]
+        return(self.__step(x,self.values[idx],self.values[idx+1],self.steps[idx],self.steps[idx+1]))
+     
+    def __step(self,x,y0,y1,x0,x1):
+        a = (y1-y0)/(x1-x0)
+        b = y0-a*x0
+        return(a*x+b)
+        
+    def __call__(self,x):
+        try:
+            return([self.__call_one(y) for y in x])
+        except TypeError:
+            return(self.__call_one(x))
+            
 def piecewise_linear(x):
     return(piecewise(breaks=15)(x))
 
@@ -145,11 +167,13 @@ def get_best_loss(function,algorithm):
             'eval_time': time.time()
             }
     t=Trials()
+    
     best = fmin(obj,
         space=hp.uniform('x', -5, 5),
         algo=algorithm,
         max_evals=1000,
         trials=t)
+    
     return(t.best_trial['result']['loss'])
 
 tpe_=[]

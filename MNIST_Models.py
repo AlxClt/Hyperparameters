@@ -7,37 +7,7 @@ Created on Mon Nov  5 16:58:55 2018
 
 import tensorflow as tf
 import math
-import numpy as np
 import functools
-
-
-
-# =============================================================================
-# Piecewise linear function
-# =============================================================================
-class piecewise:
-    
-    def __init__(self,domain=(-5,5),breaks=20,values=(0,1),seed=37):
-        np.random.seed(seed)
-        self.steps = np.linspace(domain[0]-0.01,domain[1]+0.05,breaks)
-        self.values = np.random.uniform(values[0],values[1],breaks)
-    
-    def __call_one(self,x):
-        idx=np.where(self.steps < x)[0][-1]
-        return(self.__step(x,self.values[idx],self.values[idx+1],self.steps[idx],self.steps[idx+1]))
-     
-    def __step(self,x,y0,y1,x0,x1):
-        a = (y1-y0)/(x1-x0)
-        b = y0-a*x0
-        return(a*x+b)
-        
-    def __call__(self,x):
-        try:
-            return([self.__call_one(y) for y in x])
-        except TypeError:
-            return(self.__call_one(x))
-
-
 
 
 # =============================================================================
@@ -172,10 +142,17 @@ class MNISTModel:
 
 class MoreFlexibleMNISTModel:
 
-    def __init__(self,batch,target,step,batch_size,pkeep,
-                 min_lr_ratio = 30,max_lr = 0.003,decay_step = 2000,decay_rate = 1/math.e,
-                 optimizer_hparams={'optimizer':tf.train.AdamOptimizer,'beta1':0.9,'beta2':0.99,'epsilon':1e-08},
-                 K=6,L=12,M=24,N=200,C1=6,C2=5,C3=4):           
+    def __init__(self,batch,
+                 target,
+                 step,
+                 batch_size,
+                 pkeep,
+                 conv_layers,
+                 dense_layers,
+                 optimizer_hparams,
+                 **kwargs):           
+        
+        self.go_flag=True
         
         #data
         self.batch=batch
@@ -185,41 +162,79 @@ class MoreFlexibleMNISTModel:
         #Structure parameters
         
         #Weights 
-        self.W1 = tf.Variable(tf.truncated_normal([C1, C1, 1, K], stddev=0.1))  
-        self.B1 = tf.Variable(tf.constant(0.1, tf.float32, [K]))
+        self.conv_depth=conv_layers.get('conv_depth')
+        self.conv_weights={}
         
-        self.W2 = tf.Variable(tf.truncated_normal([C2, C2, K, L], stddev=0.1))
-        self.B2 = tf.Variable(tf.constant(0.1, tf.float32, [L]))
-        
-        self.W3 = tf.Variable(tf.truncated_normal([C3, C3, L, M], stddev=0.1))
-        self.B3 = tf.Variable(tf.constant(0.1, tf.float32, [M]))
-        
-        self.W4 = tf.Variable(tf.truncated_normal([7 * 7 * M, N], stddev=0.1))
-        self.B4 = tf.Variable(tf.constant(0.1, tf.float32, [N]))
+        #building conv layers stack 
+        for i in range(1,self.conv_depth+1):
+             if i == 1 :
+                  K_init = int(conv_layers.get('channels').get('conv_channels_1'))
+                  C_init = int(conv_layers.get('filters').get('conv_filter_1'))
+                  
+                  self.conv_weights['C'+str(i)] = (tf.Variable(tf.truncated_normal([C_init, C_init, 1, K_init], stddev=0.1)),
+                                                   tf.Variable(tf.constant(0.1, tf.float32, [K_init])))
+                  last_n_channels = K_init 
+                  last_n_filters = C_init 
+             else:
+                  K = int(last_n_channels*conv_layers.get('channels').get('conv_channels_mult_'+str(i)))
+                  C = int(last_n_filters*conv_layers.get('filters').get('conv_filter_mult_'+str(i)))
+                  
+                  if (K<1 or C<1):
+                       self.go_flag=False
+                       break
+                  else:
+                       self.conv_weights['C'+str(i)] = (tf.Variable(tf.truncated_normal([C, C, last_n_channels, K], stddev=0.1)),
+                                                        tf.Variable(tf.constant(0.1, tf.float32, [K])))
+                       last_n_channels = K
+                       last_n_filters = C
 
         
-        self.W5 = tf.Variable(tf.truncated_normal([N, 10], stddev=0.1))
-        self.B5 = tf.Variable(tf.constant(0.1, tf.float32, [10]))
+        self.dense_depth=dense_layers.get('dense_depth')
+        self.dense_weights={}
         
-        #keep the last size for the reshape operation
-        self.M = M
-        
-        #Dropout
-        self.pkeep = pkeep # Dropout probability
+        #building dense layers stack      
+        for i in range(1,self.dense_depth+1):
+             if i == 1 :
+                  N_init = int(dense_layers.get('dense_units_1'))
+                  self.dense_weights['D'+str(i)]=(tf.Variable(tf.truncated_normal([7 * 7 * last_n_channels, N_init], stddev=0.1)),
+                                                  tf.Variable(tf.constant(0.1, tf.float32, [N_init])))
+                  last_n_dense = N_init
+                  
+             else:
+                  N = int(last_n_dense*dense_layers.get('dense_units_mult_'+str(i)))
+                  
+                  if (N<1):
+                       self.go_flag=False
+                       break
+                  else:
+                      self.dense_weights['D'+str(i)]=(tf.Variable(tf.truncated_normal([last_n_dense, N], stddev=0.1)),
+                                                  tf.Variable(tf.constant(0.1, tf.float32, [N])))
+                      last_n_dense = N
 
-        #Optimization parameters
-        self.min_lr = max_lr/min_lr_ratio
-        self.max_lr = max_lr
-        self.decay_step = int(decay_step)
-        self.decay_rate = decay_rate
-        self.optimizer=optimizer_hparams['optimizer']
-        self.optimizer_hparams={key: value for key, value in optimizer_hparams.items() if key!='optimizer'}
-        #Graph initialization
-        self.predict
-        self.optimize
-        self.accuracy
-        self.prediction_with_logits
-
+        if self.go_flag:
+             self.Wout = tf.Variable(tf.truncated_normal([last_n_dense, 10], stddev=0.1))
+             self.Bout = tf.Variable(tf.constant(0.1, tf.float32, [10]))
+             
+             #keep the last size for the reshape operation
+             self.M = last_n_channels
+             
+             #Dropout
+             self.pkeep = pkeep # Dropout probability
+     
+             #Optimization parameters
+             self.max_lr = optimizer_hparams.get('max_lr')
+             self.min_lr = self.max_lr/optimizer_hparams.get('min_lr_ratio')
+             self.decay_step = int(optimizer_hparams.get('decay_step'))
+             self.decay_rate = optimizer_hparams.get('decay_rate')
+             self.optimizer=optimizer_hparams.get('optimizer_algo').get('optimizer')
+             self.optimizer_hparams=optimizer_hparams.get('optimizer_algo').get('optimizer_params')
+             
+             #Graph initialization
+             self.predict
+             self.optimize
+             self.accuracy
+             self.prediction_with_logits
+            
     @lazy_property
     def prediction_with_logits(self):
         
@@ -227,22 +242,30 @@ class MoreFlexibleMNISTModel:
                 
         # The model
         stride = 1  # output is 28x28
-        Y1 = tf.nn.relu(tf.nn.conv2d(X, self.W1, strides=[1, stride, stride, 1], padding='SAME') + self.B1)
         
-        stride = 2  # output is 14x14
-        Y2 = tf.nn.relu(tf.nn.conv2d(Y1, self.W2, strides=[1, stride, stride, 1], padding='SAME') + self.B2)
-        
-        stride = 2  # output is 7x7
-        Y3 = tf.nn.relu(tf.nn.conv2d(Y2, self.W3, strides=[1, stride, stride, 1], padding='SAME') + self.B3)
+        #Conv layers stack
+        for i in range(1,self.conv_depth+1):
+             
+             #stride is defined to reduce the size to 7*7 at last layer
+             if self.conv_depth==1:
+                  stride = 4
+             if (self.conv_depth>1) & (self.conv_depth-i<2):
+                   stride = 2
+             else:
+                  stride=1
+                  
+             X = tf.nn.relu(tf.nn.conv2d(X, self.conv_weights['C'+str(i)][0], strides=[1, stride, stride, 1], padding='SAME') + self.conv_weights['C'+str(i)][1])
         
         #reshape the output from the third convolution for the fully connected layer
-        YY = tf.reshape(Y3, shape=[-1, 7 * 7 * self.M])       
+        Y = tf.reshape(X, shape=[-1, 7 * 7 * self.M])       
         
-       
-        Y4 = tf.nn.relu(tf.matmul(YY, self.W4) + self.B4)
-        YY4 = tf.nn.dropout(Y4, self.pkeep)
+        #Dense layers stack
         
-        Ylogits = tf.matmul(YY4, self.W5) + self.B5
+        for i in range(1,self.dense_depth+1):
+             Y = tf.nn.relu(tf.matmul(Y, self.dense_weights['D'+str(i)][0]) + self.dense_weights['D'+str(i)][1])
+             Y = tf.nn.dropout(Y, self.pkeep)
+             
+        Ylogits = tf.matmul(Y, self.Wout) + self.Bout
         
         return(Ylogits)
      
@@ -258,7 +281,7 @@ class MoreFlexibleMNISTModel:
         cross_entropy = tf.reduce_mean(cross_entropy)*tf.cast(self.batch_size,tf.float32)
         
         lr = self.min_lr +  tf.train.exponential_decay(self.max_lr, self.step, self.decay_step, self.decay_rate)
-        train_step = self.optimizer(lr,**self.optimizer_algo).minimize(cross_entropy)
+        train_step = self.optimizer(lr,**self.optimizer_hparams).minimize(cross_entropy)
         
         return(train_step, cross_entropy)
     
